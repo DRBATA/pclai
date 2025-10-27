@@ -7,11 +7,10 @@ import time
 import logging
 
 from main import (
-    triage_agent,
-    faq_agent,
-    seat_booking_agent,
-    flight_status_agent,
-    cancellation_agent,
+    HostAgent,
+    PIAgent,
+    GraphReasoningAgent,
+    RecommendationAgent,
     create_initial_context,
 )
 
@@ -105,16 +104,28 @@ conversation_store = InMemoryConversationStore()
 # Helpers
 # =========================
 
+def _resolve_agent(agent_name: str):
+    """Return the agent instance that matches the given name."""
+    if agent_name == HostAgent.name:
+        return HostAgent
+    if agent_name == PIAgent.name:
+        return PIAgent
+    if agent_name == GraphReasoningAgent.name:
+        return GraphReasoningAgent
+    if agent_name == RecommendationAgent.name:
+        return RecommendationAgent
+    # Fallback to host agent if unknown
+    return HostAgent
+
 def _get_agent_by_name(name: str):
     """Return the agent object by name."""
     agents = {
-        triage_agent.name: triage_agent,
-        faq_agent.name: faq_agent,
-        seat_booking_agent.name: seat_booking_agent,
-        flight_status_agent.name: flight_status_agent,
-        cancellation_agent.name: cancellation_agent,
+        HostAgent.name: HostAgent,
+        PIAgent.name: PIAgent,
+        GraphReasoningAgent.name: GraphReasoningAgent,
+        RecommendationAgent.name: RecommendationAgent,
     }
-    return agents.get(name, triage_agent)
+    return agents.get(name, HostAgent)
 
 def _get_guardrail_name(g) -> str:
     """Extract a friendly guardrail name."""
@@ -140,11 +151,10 @@ def _build_agents_list() -> List[Dict[str, Any]]:
             "input_guardrails": [_get_guardrail_name(g) for g in getattr(agent, "input_guardrails", [])],
         }
     return [
-        make_agent_dict(triage_agent),
-        make_agent_dict(faq_agent),
-        make_agent_dict(seat_booking_agent),
-        make_agent_dict(flight_status_agent),
-        make_agent_dict(cancellation_agent),
+        make_agent_dict(HostAgent),
+        make_agent_dict(PIAgent),
+        make_agent_dict(GraphReasoningAgent),
+        make_agent_dict(RecommendationAgent),
     ]
 
 # =========================
@@ -162,161 +172,221 @@ async def chat_endpoint(req: ChatRequest):
     if is_new:
         conversation_id: str = uuid4().hex
         ctx = create_initial_context()
-        current_agent_name = triage_agent.name
+        current_agent_name = HostAgent.name
         state: Dict[str, Any] = {
             "input_items": [],
             "context": ctx,
             "current_agent": current_agent_name,
         }
+        # If empty message on new conversation, trigger agent to send greeting
         if req.message.strip() == "":
-            conversation_store.save(conversation_id, state)
-            return ChatResponse(
-                conversation_id=conversation_id,
-                current_agent=current_agent_name,
-                messages=[],
-                events=[],
-                context=ctx.model_dump(),
-                agents=_build_agents_list(),
-                guardrails=[],
-            )
+            # Add a special trigger message to get the agent to greet
+            state["input_items"].append({"role": "user", "content": "[START_CONVERSATION]"})
+        else:
+            state["input_items"].append({"role": "user", "content": req.message})
     else:
         conversation_id = req.conversation_id  # type: ignore
         state = conversation_store.get(conversation_id)
+        # Add the user's message to the history as a dict (SDK handles dicts fine)
+        state["input_items"].append({"role": "user", "content": req.message})
 
-    current_agent = _get_agent_by_name(state["current_agent"])
-    state["input_items"].append({"content": req.message, "role": "user"})
+    # Ensure current_agent is properly resolved
+    current_agent_name = state.get("current_agent", HostAgent.name)
+    current_agent = _resolve_agent(current_agent_name)
+    # Save the current agent name in state (in case it was defaulted)
+    state["current_agent"] = current_agent.name
+    # Save the updated state back to the store
+    conversation_store.save(conversation_id, state)
+    
     old_context = state["context"].model_dump().copy()
     guardrail_checks: List[GuardrailCheck] = []
 
-    try:
-        result = await Runner.run(current_agent, state["input_items"], context=state["context"])
-    except InputGuardrailTripwireTriggered as e:
-        failed = e.guardrail_result.guardrail
-        gr_output = e.guardrail_result.output.output_info
-        gr_reasoning = getattr(gr_output, "reasoning", "")
-        gr_input = req.message
-        gr_timestamp = time.time() * 1000
-        for g in current_agent.input_guardrails:
-            guardrail_checks.append(GuardrailCheck(
-                id=uuid4().hex,
-                name=_get_guardrail_name(g),
-                input=gr_input,
-                reasoning=(gr_reasoning if g == failed else ""),
-                passed=(g != failed),
-                timestamp=gr_timestamp,
-            ))
-        refusal = "Sorry, I can only answer questions related to airline travel."
-        state["input_items"].append({"role": "assistant", "content": refusal})
-        return ChatResponse(
-            conversation_id=conversation_id,
-            current_agent=current_agent.name,
-            messages=[MessageResponse(content=refusal, agent=current_agent.name)],
-            events=[],
-            context=state["context"].model_dump(),
-            agents=_build_agents_list(),
-            guardrails=guardrail_checks,
-        )
+    # Keep running agents until no more handoffs occur
+    all_results = []  # Accumulate all results
+    max_handoffs = 10  # Prevent infinite loops
+    handoff_count = 0
+    
+    while handoff_count < max_handoffs:
+        try:
+            result = await Runner.run(current_agent, state["input_items"], context=state["context"])
+            all_results.append(result)  # Store each result
+            # Context is modified by reference, no need to extract it
+        except InputGuardrailTripwireTriggered as e:
+            failed = e.guardrail_result.guardrail
+            gr_output = e.guardrail_result.output.output_info
+            gr_reasoning = getattr(gr_output, "reasoning", "")
+            gr_input = req.message
+            gr_timestamp = time.time() * 1000
+            for g in current_agent.input_guardrails:
+                guardrail_checks.append(GuardrailCheck(
+                    id=uuid4().hex,
+                    name=_get_guardrail_name(g),
+                    input=gr_input,
+                    reasoning=(gr_reasoning if g == failed else ""),
+                    passed=(g != failed),
+                    timestamp=gr_timestamp,
+                ))
+            refusal = "Sorry, I can only help with questions related to your health symptoms and over-the-counter medication options."
+            state["input_items"].append({"role": "assistant", "content": refusal})
+            return ChatResponse(
+                conversation_id=conversation_id,
+                current_agent=current_agent.name,
+                messages=[MessageResponse(content=refusal, agent=current_agent.name)],
+                events=[],
+                context=state["context"].model_dump(),
+                agents=_build_agents_list(),
+                guardrails=guardrail_checks,
+            )
+        
+        # Don't pass full history - agents only need latest user message + context
+        # The context already has the structured summary (age, symptoms, etc.)
+        # We'll keep the original user message for the next agent
+        pass
+        
+        # Check if there's a handoff in the result
+        has_handoff = any(isinstance(item, HandoffOutputItem) for item in result.new_items)
+        if has_handoff:
+            # Find the target agent and continue the loop
+            for item in result.new_items:
+                if isinstance(item, HandoffOutputItem):
+                    current_agent = item.target_agent
+                    state["current_agent"] = current_agent.name
+                    handoff_count += 1
+                    break
+        else:
+            # No handoff, break the loop
+            break
 
     messages: List[MessageResponse] = []
     events: List[AgentEvent] = []
 
-    for item in result.new_items:
-        if isinstance(item, MessageOutputItem):
-            text = ItemHelpers.text_message_output(item)
-            messages.append(MessageResponse(content=text, agent=item.agent.name))
-            events.append(AgentEvent(id=uuid4().hex, type="message", agent=item.agent.name, content=text))
-        # Handle handoff output and agent switching
-        elif isinstance(item, HandoffOutputItem):
-            # Record the handoff event
-            events.append(
-                AgentEvent(
-                    id=uuid4().hex,
-                    type="handoff",
-                    agent=item.source_agent.name,
-                    content=f"{item.source_agent.name} -> {item.target_agent.name}",
-                    metadata={"source_agent": item.source_agent.name, "target_agent": item.target_agent.name},
-                )
-            )
-            # If there is an on_handoff callback defined for this handoff, show it as a tool call
-            from_agent = item.source_agent
-            to_agent = item.target_agent
-            # Find the Handoff object on the source agent matching the target
-            ho = next(
-                (h for h in getattr(from_agent, "handoffs", [])
-                 if isinstance(h, Handoff) and getattr(h, "agent_name", None) == to_agent.name),
-                None,
-            )
-            if ho:
-                fn = ho.on_invoke_handoff
-                fv = fn.__code__.co_freevars
-                cl = fn.__closure__ or []
-                if "on_handoff" in fv:
-                    idx = fv.index("on_handoff")
-                    if idx < len(cl) and cl[idx].cell_contents:
-                        cb = cl[idx].cell_contents
-                        cb_name = getattr(cb, "__name__", repr(cb))
-                        events.append(
-                            AgentEvent(
-                                id=uuid4().hex,
-                                type="tool_call",
-                                agent=to_agent.name,
-                                content=cb_name,
-                            )
-                        )
-            current_agent = item.target_agent
-        elif isinstance(item, ToolCallItem):
-            tool_name = getattr(item.raw_item, "name", None)
-            raw_args = getattr(item.raw_item, "arguments", None)
-            tool_args: Any = raw_args
-            if isinstance(raw_args, str):
-                try:
-                    import json
-                    tool_args = json.loads(raw_args)
-                except Exception:
-                    pass
-            events.append(
-                AgentEvent(
-                    id=uuid4().hex,
-                    type="tool_call",
-                    agent=item.agent.name,
-                    content=tool_name or "",
-                    metadata={"tool_args": tool_args},
-                )
-            )
-            # If the tool is display_seat_map, send a special message so the UI can render the seat selector.
-            if tool_name == "display_seat_map":
-                messages.append(
-                    MessageResponse(
-                        content="DISPLAY_SEAT_MAP",
-                        agent=item.agent.name,
+    # Keep track of the active agent for this response
+    active_agent_name = current_agent.name
+    
+    # Process ALL accumulated results
+    for result in all_results:
+        for item in result.new_items:
+            if isinstance(item, MessageOutputItem):
+                text = ItemHelpers.text_message_output(item)
+                messages.append(MessageResponse(content=text, agent=item.agent.name))
+                events.append(AgentEvent(id=uuid4().hex, type="message", agent=item.agent.name, content=text))
+            # Handle handoff output and agent switching
+            elif isinstance(item, HandoffOutputItem):
+                # Record the handoff event
+                events.append(
+                    AgentEvent(
+                        id=uuid4().hex,
+                        type="handoff",
+                        agent=item.source_agent.name,
+                        content=f"{item.source_agent.name} -> {item.target_agent.name}",
+                        metadata={"source_agent": item.source_agent.name, "target_agent": item.target_agent.name},
                     )
                 )
-        elif isinstance(item, ToolCallOutputItem):
-            events.append(
-                AgentEvent(
-                    id=uuid4().hex,
-                    type="tool_output",
-                    agent=item.agent.name,
-                    content=str(item.output),
-                    metadata={"tool_result": item.output},
+                # If there is an on_handoff callback defined for this handoff, show it as a tool call
+                from_agent = item.source_agent
+                to_agent = item.target_agent
+                # Find the Handoff object on the source agent matching the target
+                ho = next(
+                    (h for h in getattr(from_agent, "handoffs", [])
+                     if isinstance(h, Handoff) and getattr(h, "agent_name", None) == to_agent.name),
+                    None,
                 )
-            )
+                if ho:
+                    fn = ho.on_invoke_handoff
+                    fv = fn.__code__.co_freevars
+                    cl = fn.__closure__ or []
+                    if "on_handoff" in fv:
+                        idx = fv.index("on_handoff")
+                        if idx < len(cl) and cl[idx].cell_contents:
+                            cb = cl[idx].cell_contents
+                            cb_name = getattr(cb, "__name__", repr(cb))
+                            events.append(
+                                AgentEvent(
+                                    id=uuid4().hex,
+                                    type="tool_call",
+                                    agent=to_agent.name,
+                                    content=cb_name,
+                                )
+                            )
+                current_agent = item.target_agent
+                # Update state with new agent name to ensure persistence
+                state["current_agent"] = current_agent.name
+            elif isinstance(item, ToolCallItem):
+                tool_name = getattr(item.raw_item, "name", None)
+                raw_args = getattr(item.raw_item, "arguments", None)
+                tool_args: Any = raw_args
+                if isinstance(raw_args, str):
+                    try:
+                        import json
+                        tool_args = json.loads(raw_args)
+                    except Exception:
+                        pass
+                events.append(
+                    AgentEvent(
+                        id=uuid4().hex,
+                        type="tool_call",
+                        agent=item.agent.name,
+                        content=tool_name or "",
+                        metadata={"tool_args": tool_args},
+                    )
+                )
+                # If the tool is display_seat_map, send a special message so the UI can render the seat selector.
+                if tool_name == "display_seat_map":
+                    messages.append(
+                        MessageResponse(
+                            content="DISPLAY_SEAT_MAP",
+                            agent=item.agent.name,
+                        )
+                    )
+            elif isinstance(item, ToolCallOutputItem):
+                events.append(
+                    AgentEvent(
+                        id=uuid4().hex,
+                        type="tool_output",
+                        agent=item.agent.name,
+                        content=str(item.output),
+                        metadata={"tool_result": item.output},
+                    )
+                )
 
-    new_context = state["context"].dict()
-    changes = {k: new_context[k] for k in new_context if old_context.get(k) != new_context[k]}
-    if changes:
+    # Get the latest context for response
+    try:
+        # Try to use model_dump first (newer Pydantic)
+        new_context = state["context"].model_dump()
+    except AttributeError:
+        # Fall back to dict() for older Pydantic versions
+        new_context = state["context"].dict()
+
+    # Update state with current active agent
+    state["current_agent"] = active_agent_name
+    conversation_store.save(conversation_id, state)
+
+    # Show differences in context
+    context_changes = []
+    for key in new_context:
+        if key not in old_context or new_context[key] != old_context[key]:
+            context_changes.append(key)
+
+    if context_changes:
         events.append(
             AgentEvent(
                 id=uuid4().hex,
                 type="context_update",
-                agent=current_agent.name,
+                agent=active_agent_name,
                 content="",
-                metadata={"changes": changes},
+                metadata={"changes": context_changes},
             )
         )
 
-    state["input_items"] = result.to_input_list()
-    state["current_agent"] = current_agent.name
+    # Build input list excluding handoff items, then serialize
+    filtered_inputs = [
+        item for item in result.to_input_list() if not isinstance(item, HandoffOutputItem)
+    ]
+    state["input_items"] = [
+        item.model_dump() if hasattr(item, 'model_dump') else 
+        (item.dict() if hasattr(item, 'dict') else item) 
+        for item in filtered_inputs
+    ]
     conversation_store.save(conversation_id, state)
 
     # Build guardrail results: mark failures (if any), and any others as passed
@@ -338,10 +408,10 @@ async def chat_endpoint(req: ChatRequest):
 
     return ChatResponse(
         conversation_id=conversation_id,
-        current_agent=current_agent.name,
+        current_agent=active_agent_name,  # Use the final active agent name
         messages=messages,
         events=events,
-        context=state["context"].dict(),
+        context=new_context,
         agents=_build_agents_list(),
-        guardrails=final_guardrails,
+        guardrails=guardrail_checks,
     )
