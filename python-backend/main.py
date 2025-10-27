@@ -710,7 +710,7 @@ If at any point the user mentions a red flag symptom (e.g., crushing chest pain,
 PIAgent = Agent[ClinicalAgentContext](
     name="pi_agent",
     model="gpt-4o-mini",
-    tools=[check_safety_concerns, get_clinical_guidance, get_next_safety_question, record_safety_question_asked],
+    tools=[check_safety_concerns, get_clinical_guidance, get_next_safety_question, record_safety_question_asked, record_medical_history],
     handoff_description="The initial analytical agent that performs safety checks and clinical assessment.",
     handoffs=[graph_reasoning_handoff],
     instructions="""You are the Private Investigator (PI). Your role is to ask MANDATORY SAFETY QUESTIONS before any diagnostic reasoning begins.
@@ -726,9 +726,16 @@ PIAgent = Agent[ClinicalAgentContext](
 
 3. **Ask ALL Mandatory Safety Questions**:
    - Use `get_next_safety_question` tool to get the next question
-   - Ask the patient the question
-   - After they answer, use `record_safety_question_asked` with the question ID
-   - Repeat until `safety_phase_complete` is True
+   - The tool returns a `safety_question_id` - REMEMBER THIS ID
+   - Ask the patient that question (ONE question only)
+   - Wait for their answer
+   - **IMMEDIATELY** after they answer, call `record_safety_question_asked` with that exact `safety_question_id`
+   - **DO NOT SKIP** recording - you must record EVERY question you ask, even if the answer is complex
+   - **If the answer contains relevant medical history**, also call `record_medical_history` to capture it
+     Example: "not currently but I had blood in urine in the past, had a cystoscopy" 
+     → Record: "previous hematuria, cystoscopy performed (negative)"
+   - Check the response from `record_safety_question_asked`: if `safety_phase_complete` is True, proceed to step 4
+   - If not complete, loop back and get the next question
    
    **Safety questions cover:**
    - Blood in urine (bladder cancer, kidney stones)
@@ -737,7 +744,7 @@ PIAgent = Agent[ClinicalAgentContext](
    - Unexplained weight loss (malignancy)
    - Family history of cancer (risk stratification)
 
-4. **Get Clinical Context**: After ALL safety questions are complete, use `get_clinical_guidance` tool to understand the clinical landscape.
+4. **Get Clinical Context**: Once `safety_phase_complete` is True, optionally use `get_clinical_guidance` tool to understand the clinical landscape. Then immediately proceed to step 5.
 
 5. **REQUIRED: Transition Message**: You MUST say to the patient:
    "Thank you for answering those safety questions. I'm now going to bring in our diagnostic specialist who will ask some targeted questions to narrow down the cause of your symptoms."
@@ -748,6 +755,9 @@ PIAgent = Agent[ClinicalAgentContext](
 - ASK ALL safety questions before handing off (don't skip any)
 - ONE question at a time
 - Wait for patient answer after each question
+- **YOU MUST RECORD EVERY QUESTION YOU ASK** - call `record_safety_question_asked` immediately after each answer
+- If you ask a question but forget to record it, you'll get stuck in a loop
+- Complex patient answers (e.g., "not now but in the past...") still need recording
 - DO NOT start diagnostic questioning - that's Graph Agent's job
 - ALWAYS send the transition message before handoff
 
