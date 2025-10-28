@@ -679,3 +679,111 @@ def score_procedural_pathway(context: RunContextWrapper[Any]) -> Dict[str, Any]:
         
     except Exception as e:
         return {"error": str(e)}
+
+
+# =============================================================================
+# PROCEDURE EDUCATION TOOLS
+# =============================================================================
+
+@function_tool(
+    name_override="get_procedure_education",
+    description_override="Get detailed patient education about a specific prostate procedure"
+)
+def get_procedure_education(context: RunContextWrapper[Any], procedure_name: str) -> Dict[str, Any]:
+    """
+    Fetch detailed education content about a prostate procedure for patient discussion.
+    
+    :param context: Runtime context
+    :param procedure_name: One of: "mri_fusion_biopsy", "hifu", "active_surveillance", 
+                           "radical_prostatectomy", "radiation_therapy"
+    :return: Dict with procedure details, recovery, side effects, evidence
+    """
+    import os
+    
+    procedure_file = f"procedures/procedure_education.md"
+    
+    try:
+        if not os.path.exists(procedure_file):
+            return {
+                "error": f"Procedure file not found: {procedure_file}",
+                "available_procedures": [
+                    "mri_fusion_biopsy",
+                    "hifu", 
+                    "active_surveillance",
+                    "radical_prostatectomy",
+                    "radiation_therapy"
+                ]
+            }
+        
+        with open(procedure_file, 'r') as f:
+            content = f.read()
+        
+        # Extract the section for the requested procedure
+        procedure_map = {
+            "mri_fusion_biopsy": "## MRI-Fusion Biopsy",
+            "hifu": "## HIFU (High-Intensity Focused Ultrasound)",
+            "active_surveillance": "## Active Surveillance",
+            "radical_prostatectomy": "## Radical Prostatectomy (Surgery)",
+            "radiation_therapy": "## Radiation Therapy"
+        }
+        
+        if procedure_name.lower() not in procedure_map:
+            return {
+                "error": f"Unknown procedure: {procedure_name}",
+                "available_procedures": list(procedure_map.keys())
+            }
+        
+        # Find and extract the section
+        start_marker = procedure_map[procedure_name.lower()]
+        start_idx = content.find(start_marker)
+        
+        if start_idx == -1:
+            return {"error": f"Procedure section not found: {procedure_name}"}
+        
+        # Find the next section (##) or end of file
+        next_section = content.find("\n## ", start_idx + 1)
+        if next_section == -1:
+            section_content = content[start_idx:]
+        else:
+            section_content = content[start_idx:next_section]
+        
+        return {
+            "procedure": procedure_name,
+            "content": section_content,
+            "formatted": True
+        }
+        
+    except Exception as e:
+        return {"error": f"Failed to load procedure education: {str(e)}"}
+
+
+@function_tool(
+    name_override="get_procedure_comparison",
+    description_override="Get comparison table of prostate cancer treatment options"
+)
+def get_procedure_comparison(context: RunContextWrapper[Any]) -> Dict[str, Any]:
+    """
+    Fetch the procedure comparison table for discussing treatment options with patient.
+    
+    :param context: Runtime context
+    :return: Dict with comparison table and decision framework
+    """
+    import os
+    
+    comparison_file = "procedures/procedure_comparison_table.md"
+    
+    try:
+        if not os.path.exists(comparison_file):
+            return {"error": f"Comparison file not found: {comparison_file}"}
+        
+        with open(comparison_file, 'r') as f:
+            content = f.read()
+        
+        return {
+            "content": content,
+            "formatted": True,
+            "use_case": "Present this table when discussing treatment options with patient"
+        }
+        
+    except Exception as e:
+        return {"error": f"Failed to load procedure comparison: {str(e)}"}

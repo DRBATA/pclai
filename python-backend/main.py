@@ -15,7 +15,9 @@ from tools import (
     update_graph_with_answer,
     generate_patient_action_plan,
     generate_gp_referral_letter,
-    score_procedural_pathway
+    score_procedural_pathway,
+    get_procedure_education,
+    get_procedure_comparison
 )
 
 from agents import (
@@ -883,7 +885,9 @@ RecommendationAgent = Agent[ClinicalAgentContext](
     tools=[
         generate_patient_action_plan,
         generate_gp_referral_letter,
-        score_procedural_pathway
+        score_procedural_pathway,
+        get_procedure_education,
+        get_procedure_comparison
     ],
     handoff_description="Final recommendation specialist that provides comprehensive action plans and patient education.",
     instructions="""You are the Final Recommendation Agent. You synthesize all the information gathered and provide comprehensive guidance.
@@ -907,12 +911,13 @@ RecommendationAgent = Agent[ClinicalAgentContext](
    If the patient had specific worries or wanted to understand something (e.g., "worried about prostate cancer", "want to understand PSA better", "avoid surgery"):
    - Explain using your knowledge in plain language
    - Address their specific concerns directly
+   - Use the procedure education guide to explain options clearly
 
 3. **Generate Comprehensive Action Plan**:
    Use `generate_patient_action_plan` tool to create:
    - Patient information summary
-   - Differential diagnoses
-   - Recommended investigations (PSA, urine test, ultrasound, etc.)
+   - Differential diagnoses with probabilities
+   - Recommended investigations (PSA, DRE, MRI, biopsy - in order)
    - Management and treatment options
    - Follow-up plan
    - Safety netting
@@ -920,18 +925,38 @@ RecommendationAgent = Agent[ClinicalAgentContext](
 4. **Present the Action Plan**:
    Share the action plan with the patient. Explain:
    - The most likely diagnosis and why
-   - What investigations are recommended and why
+   - What investigations are recommended and why (in sequence)
    - Treatment options (lifestyle, medications, referrals)
    - What to watch for (red flags)
 
-5. **Score Procedural Pathways** (if relevant features available):
-   If the patient has had imaging (MRI/PI-RADS), PSA density, lesion measurements, etc., use `score_procedural_pathway` to:
+5. **ONLY Score Procedural Pathways if patient HAS investigation results**:
+   Check context for: PI-RADS score, PSA density, Gleason score, lesion measurements
+   
+   IF these exist, use `score_procedural_pathway` to:
    - Determine biopsy indications (MRI-fusion)
    - Assess HIFU eligibility
-   - Route to appropriate specialist (Nurse/PA/Doctor)
+   - Route to appropriate specialist
    - Provide evidence-based procedural recommendations
    
-   Present this as part of the "next steps" - e.g., "Based on your PI-RADS score of 4 and PSA density of 0.18, you would be a candidate for MRI-fusion biopsy. This has been assigned to our Urologist for review and consent discussion."
+   Present as: "Based on your PI-RADS score of 4 and PSA density of 0.18, you would be a candidate for MRI-fusion biopsy. Here's what that involves..."
+   
+   THEN use `get_procedure_education(procedure_name)` tool to fetch detailed information:
+   - What the procedure is
+   - What to expect
+   - Recovery timeline
+   - Side effects and outcomes
+   - Evidence base
+   
+   Present this information clearly to the patient.
+   
+   IF investigation results NOT available, skip procedural scoring and focus on investigation plan instead.
+
+6. **Use Comparison Tables When Discussing Options**:
+   If patient is choosing between multiple treatment options, use `get_procedure_comparison()` tool to:
+   - Show side-by-side comparison of procedures
+   - Display recovery times, continence/erectile function outcomes
+   - Present decision framework by risk group or patient priority
+   - Help patient understand trade-offs
 
 6. **Offer GP Letter** (Optional):
    Ask: "Would you like me to generate a formal summary letter that you can share with your GP?"
