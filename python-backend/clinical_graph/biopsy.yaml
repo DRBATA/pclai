@@ -1,0 +1,33 @@
+calculator: MRI_FUSION_INDICATIONS
+decisions:
+  - name: Discuss_MRI_Fusion_Biopsy
+    output_weight: 1.0
+    consent_template: Consent_Biopsy@v1.1
+
+criteria:
+  - key: Indication_High_MRI_Fusion
+    supports:
+      - feature: PIRADS
+        threshold: 4
+        lr: 3.2
+        weight: 1.3
+        evidence: EAU-2025-PI-RADS
+      - feature: PSAD
+        threshold: 0.15
+        lr: 2.5
+        weight: 1.0
+        evidence: NICE-NG131-2024
+      - feature: PSAV
+        threshold: 1.5
+        lr: 1.8
+        weight: 0.6
+        evidence: Carter-JAMA-2021
+      - feature: LESION
+        threshold: 8
+        lr: 1.7
+        weight: 0.5
+        evidence: Radiology-2020-Mehralivand
+
+thresholds:
+  score_low: 0.5
+  score_high: 1.5

@@ -1,0 +1,36 @@
+calculator: HIFU_ELIGIBILITY
+decisions:
+  - name: Discuss_Focal_HIFU
+    output_weight: 1.0
+    consent_template: Consent_HIFU@v1.3
+
+criteria:
+  - key: Eligibility_HIFU_Focal
+    supports:
+      - feature: PIRADS
+        threshold: 4
+        lr: 1.6
+        weight: 0.6
+        evidence: EAU-2023
+      - feature: LESION
+        threshold: 8
+        lr: 1.9
+        weight: 0.8
+        evidence: Ahmed-2021-LancetOnc
+      - feature: GLEASON_MAX
+        threshold: 7   # interpreted as ≤7 (3+4)
+        lr: 2.1
+        weight: 0.9
+        evidence: EAU-2023
+
+thresholds:
+  score_low: 0.4
+  score_high: 1.3
+
+contraindications:
+  - decision: Discuss_Focal_HIFU
+    feature: PROSTATE_VOL
+    op: ">"
+    value: 60
+    weight: 0.8
+    evidence: EAU-2023

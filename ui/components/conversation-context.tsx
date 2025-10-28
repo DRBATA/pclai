@@ -6,11 +6,24 @@ import { BookText } from "lucide-react";
 
 interface ConversationContextProps {
   context: {
-    passenger_name?: string;
-    confirmation_number?: string;
-    seat_number?: string;
-    flight_number?: string;
-    account_number?: string;
+    symptoms?: string;                           // Host Agent collects
+    possible_conditions?: string;                // Scout Agent determines
+    calculators?: Record<string, any>;           // Librarian Agent calculates with tool 
+    differential_probabilities?: Record<string, number>; // PI analysis of risks with Bayesian inference
+    relevant_red_flags_absent?: string[];        // Safety check from all agents
+    safety_concerns?: Array<{                    // Tracked safety concerns with agent analyses
+      id: string;                                // Concern identifier
+      title: string;                             // Brief title
+      severity: number;                          // 1-5 scale
+      agent_analysis: string;                    // Clinical reasoning
+      assessment_status: string;                 // pending/reviewed/cleared/escalated
+      reviewed_by: string[];                     // Agents who reviewed
+    }>;
+    safety_clinical_assessment?: string;         // Collaborative safety assessment
+    escalation_advice?: string;                  // Explains what should happen and escalation guidelines
+    recommended_options?: string[];              // Maître d' Agent provides ideal combinations
+    contraindication_checker?: string[];         // Medication reviews and safety checks
+    account_number?: string;                     // System use
   };
 }
 
@@ -38,7 +51,7 @@ export function ConversationContext({ context }: ConversationContextProps) {
                         : "text-gray-400 italic"
                     }
                   >
-                    {value || "null"}
+                    {typeof value === 'object' ? JSON.stringify(value) : value || "null"}
                   </span>
                 </div>
               </div>

@@ -1,0 +1,257 @@
+{
+  "red_flags": [
+    {
+      "id": "cardiac_chest_pain",
+      "triggers": ["crushing chest pain", "chest pain spreading to jaw", "chest pain to arm", "sweating with chest pain", "pale with chest pain", "breathless with chest pain"],
+      "severity": 5,
+      "action": "Call 999 immediately",
+      "timeframe": "immediate",
+      "category": "cardiac",
+      "title": "Suspected Heart Attack",
+      "description": "Sudden crushing chest pain spreading to jaw/arm with sweating, pallor, breathlessness",
+      "key_negatives": ["No radiation", "No sweating", "Pain with movement"]
+    },
+    {
+      "id": "stroke_symptoms",
+      "triggers": ["slurred speech", "face drooping", "uneven face", "loss of strength arm", "loss of strength leg", "vision changes sudden", "unable to walk dizziness", "sudden confusion"],
+      "severity": 5,
+      "action": "Call 999 immediately - suspected stroke",
+      "timeframe": "immediate",
+      "category": "neurological",
+      "title": "Suspected Stroke",
+      "description": "FAST signs: Face drooping, Arm weakness, Speech difficulty, Time to call 999",
+      "key_negatives": ["Gradual onset", "After alcohol", "Bilateral symptoms"]
+    },
+    {
+      "id": "severe_headache_aneurysm",
+      "triggers": ["sudden hit back of head", "worst headache ever", "thunderclap headache"],
+      "severity": 5,
+      "action": "Call 999 immediately - possible brain bleed",
+      "timeframe": "immediate",
+      "category": "neurological",
+      "title": "Suspected Aneurysm/Brain Bleed",
+      "description": "Sudden severe headache like being hit in back of head",
+      "key_negatives": ["Gradual onset", "Previous similar headaches", "Responds to painkillers"]
+    },
+    {
+      "id": "head_injury_delayed",
+      "triggers": ["head injury week ago", "head injury with confusion", "head injury with vomiting"],
+      "severity": 5,
+      "action": "Go to A&E immediately for brain scan",
+      "timeframe": "immediate",
+      "category": "trauma",
+      "title": "Delayed Head Injury Bleed",
+      "description": "Slow bleed developing after head injury - needs urgent scan",
+      "key_negatives": ["No injury", "Minor bump", "No symptoms"]
+    },
+    {
+      "id": "seizure",
+      "triggers": ["seizure", "fit", "convulsion", "shaking uncontrollably"],
+      "severity": 5,
+      "action": "Call 999 immediately",
+      "timeframe": "immediate",
+      "category": "neurological",
+      "title": "Seizure",
+      "description": "First seizure or seizure outside of known epilepsy pattern",
+      "key_negatives": ["Known epilepsy", "Recovered fully", "Brief episode"]
+    },
+    {
+      "id": "anaphylaxis",
+      "triggers": ["throat swelling", "unable to swallow", "difficulty breathing after food", "difficulty breathing after sting", "lips swelling", "tongue swelling"],
+      "severity": 5,
+      "action": "Call 999 immediately - use EpiPen if available",
+      "timeframe": "immediate",
+      "category": "allergic",
+      "title": "Anaphylaxis",
+      "description": "Severe allergic reaction with throat swelling/breathing difficulty",
+      "key_negatives": ["Mild rash only", "No breathing problems", "No swelling"]
+    },
+    {
+      "id": "severe_breathlessness",
+      "triggers": ["can't breathe", "gasping for air", "blue lips", "blue fingers"],
+      "severity": 5,
+      "action": "Call 999 immediately",
+      "timeframe": "immediate",
+      "category": "respiratory",
+      "title": "Severe Breathlessness",
+      "description": "Unable to speak full sentences, blue coloration, severe dyspnea",
+      "key_negatives": ["Can speak sentences", "Normal color", "Exercise-related only"]
+    },
+    {
+      "id": "pe_suspected",
+      "triggers": ["breathless with swollen leg", "chest pain with swollen calf", "sudden breathlessness after surgery", "sudden breathlessness after long flight"],
+      "severity": 5,
+      "action": "Call 999 immediately - suspected pulmonary embolism",
+      "timeframe": "immediate",
+      "category": "respiratory",
+      "title": "Suspected Pulmonary Embolism",
+      "description": "Blood clot in lung - breathlessness with swollen limb",
+      "key_negatives": ["No swelling", "Gradual onset", "No risk factors"]
+    },
+    {
+      "id": "meningitis",
+      "triggers": ["rash won't blanch", "non-blanching rash", "neck very stiff", "can't touch chin to chest", "severe neck pain with stiffness", "light hurts eyes with fever", "photophobia with fever"],
+      "severity": 5,
+      "action": "Call 999 immediately - suspected meningitis",
+      "timeframe": "immediate",
+      "category": "infection",
+      "title": "Suspected Meningitis",
+      "description": "Non-blanching rash, severe neck stiffness, photophobia with fever",
+      "key_negatives": ["Blanching rash", "Neck moves freely", "No fever"]
+    },
+    {
+      "id": "sepsis",
+      "triggers": ["very pale", "cold extremities", "confused with infection", "not right with infection", "odd behavior with infection", "aggressive with infection"],
+      "severity": 5,
+      "action": "Call 999 immediately - suspected sepsis",
+      "timeframe": "immediate",
+      "category": "infection",
+      "title": "Suspected Sepsis",
+      "description": "Confusion, pallor, cold extremities with infection",
+      "key_negatives": ["Alert", "Normal color", "Warm", "No infection signs"]
+    },
+    {
+      "id": "acute_abdomen",
+      "triggers": ["tummy pain driving over bump", "very tender abdomen", "rigid abdomen", "can't move with tummy pain"],
+      "severity": 5,
+      "action": "Go to A&E immediately - possible surgical emergency",
+      "timeframe": "immediate",
+      "category": "surgical",
+      "title": "Acute Abdomen",
+      "description": "Severe abdominal pain sensitive to movement - possible surgical emergency",
+      "key_negatives": ["Cramping", "Comes and goes", "After eating"]
+    },
+    {
+      "id": "bowel_obstruction",
+      "triggers": ["not pooping not farting", "can't pass wind", "vomiting with no bowel movement", "distended abdomen painful"],
+      "severity": 5,
+      "action": "Go to A&E immediately",
+      "timeframe": "immediate",
+      "category": "surgical",
+      "title": "Suspected Bowel Obstruction",
+      "description": "Unable to pass stool or wind - complete obstruction",
+      "key_negatives": ["Passing some wind", "Normal bowel sounds", "Mild constipation"]
+    },
+    {
+      "id": "cauda_equina",
+      "triggers": ["back pain with numbness below", "back pain can't feel down below", "back pain with leg weakness", "unable to wee with back pain", "saddle numbness"],
+      "severity": 5,
+      "action": "Call 999 immediately - suspected cauda equina",
+      "timeframe": "immediate",
+      "category": "neurological",
+      "title": "Suspected Cauda Equina Syndrome",
+      "description": "Back pain with saddle numbness, urinary retention, leg weakness",
+      "key_negatives": ["Normal sensation", "No urinary problems", "No leg weakness"]
+    },
+    {
+      "id": "bleeding_serious",
+      "triggers": ["blood in urine", "blood in phlegm", "blood in poo", "coughing up blood", "vomiting blood", "bleeding that won't stop"],
+      "severity": 4,
+      "action": "Go to A&E or call 999 if severe",
+      "timeframe": "immediate to urgent",
+      "category": "bleeding",
+      "title": "Serious Bleeding",
+      "description": "Blood in urine, phlegm, stool or uncontrolled bleeding",
+      "key_negatives": ["Trace blood", "After straining", "Hemorrhoids known"]
+    },
+    {
+      "id": "severe_burns",
+      "triggers": ["large area burnt", "painless burn", "burn no sensation", "burn very painful", "burn full thickness"],
+      "severity": 4,
+      "action": "Go to A&E immediately",
+      "timeframe": "immediate",
+      "category": "trauma",
+      "title": "Severe Burns",
+      "description": "Large area, full thickness (painless), or very painful burns",
+      "key_negatives": ["Small area", "Minor scald", "First degree"]
+    },
+    {
+      "id": "major_injury",
+      "triggers": ["fell from height", "fell from first floor", "deformity after injury", "can't move after injury", "lost sensation after injury"],
+      "severity": 4,
+      "action": "Go to A&E immediately",
+      "timeframe": "immediate",
+      "category": "trauma",
+      "title": "Major Injury",
+      "description": "Significant mechanism of injury or obvious deformity/loss of function",
+      "key_negatives": ["Minor fall", "Can move", "Normal sensation", "Mild pain"]
+    },
+    {
+      "id": "throat_obstruction",
+      "triggers": ["tonsil abscess", "can't swallow", "severe throat swelling", "drooling"],
+      "severity": 5,
+      "action": "Call 999 immediately - airway emergency",
+      "timeframe": "immediate",
+      "category": "respiratory",
+      "title": "Airway Obstruction",
+      "description": "Throat swelling or abscess causing difficulty swallowing/breathing",
+      "key_negatives": ["Can swallow", "Mild sore throat", "No drooling"]
+    },
+    {
+      "id": "child_under_2",
+      "triggers": ["baby unwell", "toddler unwell", "infant unwell", "child under 2"],
+      "severity": 4,
+      "action": "Seek medical review immediately",
+      "timeframe": "immediate",
+      "category": "pediatric",
+      "title": "Child Under 2 Years Old",
+      "description": "Any illness in child under 2 requires medical review",
+      "key_negatives": []
+    },
+    {
+      "id": "child_behavior_change",
+      "triggers": ["child not interacting", "child inconsolable", "child floppy", "child lost interest", "child changed color", "parental concern child"],
+      "severity": 4,
+      "action": "Seek medical review urgently",
+      "timeframe": "urgent",
+      "category": "pediatric",
+      "title": "Serious Illness in Child",
+      "description": "Abnormal behavior, floppiness, color change, or significant parental concern",
+      "key_negatives": ["Playing normally", "Eating/drinking", "Alert", "Normal color"]
+    },
+    {
+      "id": "drowning_electrocution",
+      "triggers": ["drowning", "electrocution", "electric shock", "near drowning"],
+      "severity": 5,
+      "action": "Call 999 immediately",
+      "timeframe": "immediate",
+      "category": "trauma",
+      "title": "Drowning/Electrocution",
+      "description": "Any drowning incident or electrical injury",
+      "key_negatives": []
+    },
+    {
+      "id": "poisoning",
+      "triggers": ["poisoning", "overdose", "swallowed poison", "took too many tablets"],
+      "severity": 5,
+      "action": "Call 999 immediately",
+      "timeframe": "immediate",
+      "category": "toxicology",
+      "title": "Poisoning/Overdose",
+      "description": "Any suspected poisoning or drug overdose",
+      "key_negatives": []
+    },
+    {
+      "id": "hypothermia",
+      "triggers": ["very cold", "hypothermia", "body temperature very low", "shivering uncontrollably"],
+      "severity": 5,
+      "action": "Call 999 immediately",
+      "timeframe": "immediate",
+      "category": "environmental",
+      "title": "Severe Hypothermia",
+      "description": "Dangerously low body temperature",
+      "key_negatives": ["Feeling cold normally", "Dressed appropriately"]
+    },
+    {
+      "id": "passing_out",
+      "triggers": ["passed out", "fainted", "lost consciousness", "collapsed"],
+      "severity": 4,
+      "action": "Call 999 or go to A&E",
+      "timeframe": "immediate to urgent",
+      "category": "cardiovascular",
+      "title": "Loss of Consciousness",
+      "description": "Unexplained collapse or loss of consciousness",
+      "key_negatives": ["Vasovagal", "After standing quickly", "Fully recovered", "Known cause"]
+    }
+  ]
+}

@@ -252,6 +252,8 @@ async def chat_endpoint(req: ChatRequest):
                     current_agent = item.target_agent
                     state["current_agent"] = current_agent.name
                     handoff_count += 1
+                    # Don't clear input_items - keep conversation flowing
+                    # The agent will start working based on context
                     break
         else:
             # No handoff, break the loop
@@ -264,10 +266,13 @@ async def chat_endpoint(req: ChatRequest):
     active_agent_name = current_agent.name
     
     # Process ALL accumulated results
+    logger.info(f"Processing {len(all_results)} agent results")
     for result in all_results:
+        logger.info(f"Result has {len(result.new_items)} items")
         for item in result.new_items:
             if isinstance(item, MessageOutputItem):
                 text = ItemHelpers.text_message_output(item)
+                logger.info(f"Message from {item.agent.name}: {text[:100]}")
                 messages.append(MessageResponse(content=text, agent=item.agent.name))
                 events.append(AgentEvent(id=uuid4().hex, type="message", agent=item.agent.name, content=text))
             # Handle handoff output and agent switching

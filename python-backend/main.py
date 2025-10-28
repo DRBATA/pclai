@@ -5,18 +5,14 @@ from dotenv import load_dotenv
 load_dotenv()
 from pydantic import BaseModel
 import string
-from typing import Any
+from typing import Any, Dict
 
 from tools import (
-    run_symptom_calculation, 
-    check_safety_concerns, 
-    get_clinical_guidance,
-    get_next_safety_question,
-    record_safety_question_asked,
+    get_red_flag_checklist,
+    record_red_flag_answers,
     build_probability_graph,
     find_strategic_questions,
     update_graph_with_answer,
-    get_patient_education,
     generate_patient_action_plan,
     generate_gp_referral_letter,
     score_procedural_pathway
@@ -175,8 +171,6 @@ async def display_seat_map(
     # The returned string will be interpreted by the UI to open the seat selector.
     return "DISPLAY_SEAT_MAP"
 
-# Define the Calculator Tool for the PI Agent
-calculator_tool = run_symptom_calculation
 
 # =========================
 # CLINICAL CONTEXT TOOLS
@@ -211,26 +205,74 @@ async def store_patient_info(
 
 
 @function_tool(
+    name_override="search_urology_symptoms",
+    description_override="Search urology symptom keywords to find matching structured symptom IDs from patient's description"
+)
+async def search_urology_symptoms(
+    symptom_description: str
+) -> Dict[str, Any]:
+    """
+    Maps patient's natural language to structured symptom IDs used by the calculator.
+    Returns symptom IDs that match the calculator's SYMPTOM_POINTS keys.
+    
+    :param symptom_description: Patient's description of symptoms in natural language
+    :return: Matched symptoms with IDs and labels
+    """
+    from differentials.urology_calculator import SYMPTOM_KEYWORD_MAP
+    
+    desc_lower = symptom_description.lower()
+    matches = []
+    
+    # Search through each symptom's keywords
+    for symptom_id, symptom_data in SYMPTOM_KEYWORD_MAP.items():
+        symptom_label = symptom_data["label"]
+        keywords = symptom_data["keywords"]
+        
+        # Check if any keyword matches
+        confidence = 0
+        matched_keywords = []
+        
+        for keyword in keywords:
+            if keyword in desc_lower:
+                confidence += 1
+                matched_keywords.append(keyword)
+        
+        # If we found matches, add to results
+        if confidence > 0:
+            matches.append({
+                "id": symptom_id,
+                "label": symptom_label,
+                "confidence": min(confidence / 3.0, 1.0),  # Normalize 0-1
+                "matched_keywords": matched_keywords[:3]  # Top 3
+            })
+    
+    # Sort by confidence
+    matches.sort(key=lambda x: x["confidence"], reverse=True)
+    
+    return {
+        "matches": matches[:5],  # Top 5 matches
+        "total_found": len(matches),
+        "suggestion": f"Found {len(matches)} potential symptom(s). Confirm with patient before recording."
+    }
+
+
+@function_tool(
     name_override="record_symptoms",
-    description_override="Record symptoms mentioned by the patient during conversation"
+    description_override="Record confirmed structured symptom IDs (use after patient confirms)"
 )
 async def record_symptoms(
     context: RunContextWrapper[ClinicalAgentContext],
-    symptoms: str,
+    symptom_ids: str,
     chief_complaint: str | None = None
 ) -> str:
     """
-    Store symptoms from patient narrative in context.
+    Store patient's symptoms using structured IDs from urology symptom matrix.
     
-    :param symptoms: Comma-separated list of symptoms (e.g. "sore throat, headache, fever")
-    :param chief_complaint: Main complaint in patient's words
+    :param symptom_ids: Comma-separated symptom IDs (e.g., "weak_stream,frequency,nocturia")
+    :param chief_complaint: Brief description of main complaint
     """
-    symptom_list = [s.strip() for s in symptoms.split(",") if s.strip()]
-    
-    # Add new symptoms (avoid duplicates)
-    for symptom in symptom_list:
-        if symptom.lower() not in [s.lower() for s in context.context.reported_symptoms]:
-            context.context.reported_symptoms.append(symptom.lower())
+    symptom_list = [s.strip() for s in symptom_ids.split(",") if s.strip()]
+    context.context.reported_symptoms.extend(symptom_list)
     
     if chief_complaint:
         context.context.chief_complaint = chief_complaint
@@ -650,7 +692,7 @@ HostAgent = Agent[ClinicalAgentContext](
     name="host_agent",
     model="gpt-4o-mini",
     handoff_description="The friendly agent that starts the conversation and gathers the user's initial story.",
-    tools=[store_patient_info, record_symptoms, record_medical_history, record_patient_concerns],
+    tools=[store_patient_info, search_urology_symptoms, record_symptoms, record_medical_history, record_patient_concerns],
     instructions="""You are the Host, the first point of contact for the user. Your persona is warm, empathetic, and reassuring.
 
 **CRITICAL: If you see the message "[START_CONVERSATION]" or this is clearly the first interaction, you MUST send this exact greeting:**
@@ -675,23 +717,34 @@ After the greeting/disclaimer, your process is as follows:
 
 **IMMEDIATELY after the user's FIRST response:**
 1. **Reflect back what they said** in your own words to show you heard them
-2. **Use your tools to capture everything they mentioned:**
+
+2. **For SYMPTOMS - Use Search and Confirm Workflow:**
+   - When user describes symptoms (e.g., "struggling with urinary flow", "going to toilet too often")
+   - Call `search_urology_symptoms` with their description
+   - The tool returns structured symptom IDs and labels (e.g., "weak_stream", "frequency")
+   - **Say back to patient:** "So you're experiencing [symptom labels from search]?"
+   - **Wait for confirmation**
+   - Once confirmed, call `record_symptoms` with the symptom IDs (e.g., "weak_stream,frequency")
+
+3. **Use your tools to capture other information:**
    - Age/gender/medications mentioned? → Call `store_patient_info` NOW
-   - Symptoms mentioned? → Call `record_symptoms` NOW
    - Medical history mentioned? → Call `record_medical_history` NOW
    - Concerns/goals mentioned? → Call `record_patient_concerns` NOW
 
-3. **Check context before asking ANY question** - if information is already stored, DO NOT ask again
-4. **Maximum 1-2 follow-up questions** - only ask if critical info missing (age, chief symptom, or consultation goal)
-5. **Then hand off immediately** - your job is data collection, not conversation
+4. **Check context before asking ANY question** - if information is already stored, DO NOT ask again
+5. **Maximum 1-2 follow-up questions** - only ask if critical info missing (age, chief symptom, or consultation goal)
+6. **Then hand off immediately** - your job is data collection, not conversation
 
-**Example:**
-User: "I'm 55, had HIFU for prostate cancer, wondering about surgery"
-YOU: "Thank you for sharing that. Let me capture this information..."
+**Example with Symptom Search:**
+User: "I'm 55, struggling with urinary flow and going to the toilet too often at night"
+YOU: "Thank you for sharing that."
+[Call search_urology_symptoms("struggling with urinary flow and going to the toilet too often at night")]
+→ Returns: {"matches": [{"id": "weak_stream", "label": "Weak urine stream"}, {"id": "nocturia", "label": "Frequent nighttime urination"}]}
+YOU: "So you're experiencing weak urine stream and frequent nighttime urination - is that right?"
+User: "Yes"
 [Call store_patient_info(age=55)]
-[Call record_medical_history(medical_history=["previous prostate cancer", "previous HIFU treatment"])]
-[Call record_patient_concerns(goals=["considering surgical options"])]
-YOU: "I've noted your history and that you're exploring surgical options. Let me bring in our specialist..."
+[Call record_symptoms(symptom_ids="weak_stream,nocturia", chief_complaint="urinary flow problems")]
+YOU: "I've noted your symptoms. Let me bring in our specialist..."
 [Call handoff_to_pi]
 
 **Phase 2: The Handoff**
@@ -710,58 +763,59 @@ If at any point the user mentions a red flag symptom (e.g., crushing chest pain,
 PIAgent = Agent[ClinicalAgentContext](
     name="pi_agent",
     model="gpt-4o-mini",
-    tools=[check_safety_concerns, get_clinical_guidance, get_next_safety_question, record_safety_question_asked, record_medical_history],
-    handoff_description="The initial analytical agent that performs safety checks and clinical assessment.",
+    tools=[get_red_flag_checklist, record_red_flag_answers, search_urology_symptoms, record_symptoms, record_medical_history],
+    handoff_description="Safety gatekeeper - asks red flag questions and captures any additional symptoms mentioned.",
     handoffs=[graph_reasoning_handoff],
-    instructions="""You are the Private Investigator (PI). Your role is to ask MANDATORY SAFETY QUESTIONS before any diagnostic reasoning begins.
+    instructions="""You are the Private Investigator (PI). Your role is SAFETY GATEKEEPER - ask ONE red flag question, then hand off.
 
 **Your Process:**
 
-1. **Acknowledge the handoff**: Say 'Thank you for sharing that. Before we proceed, I need to ask you a few important safety questions to rule out any urgent conditions.'
+1. **Acknowledge**: Say 'Thank you for sharing. Before we proceed, I need to ask about potential red flag symptoms.'
 
-2. **Quick Keyword Safety Scan**: Use `check_safety_concerns` tool on symptoms already mentioned.
-   - If red flags found with severity 5: STOP and advise emergency care (999/A&E)
-   - If red flags found with severity 4: Advise urgent GP/A&E review
-   - If no red flags in existing symptoms: Continue to safety questions
+2. **Get Red Flag Checklist**: Call `get_red_flag_checklist()` to get the complete list of 7 red flags.
 
-3. **Ask ALL Mandatory Safety Questions**:
-   - Use `get_next_safety_question` tool to get the next question
-   - The tool returns a `safety_question_id` - REMEMBER THIS ID
-   - Ask the patient that question (ONE question only)
-   - Wait for their answer
-   - **IMMEDIATELY** after they answer, call `record_safety_question_asked` with that exact `safety_question_id`
-   - **DO NOT SKIP** recording - you must record EVERY question you ask, even if the answer is complex
-   - **If the answer contains relevant medical history**, also call `record_medical_history` to capture it
-     Example: "not currently but I had blood in urine in the past, had a cystoscopy" 
-     → Record: "previous hematuria, cystoscopy performed (negative)"
-   - Check the response from `record_safety_question_asked`: if `safety_phase_complete` is True, proceed to step 4
-   - If not complete, loop back and get the next question
+3. **Ask ONE Question**: Present ALL red flags in ONE question:
+   "Do you have ANY of the following? If so, which ones?
+   - Blood in your urine (red, pink, or brown)
+   - Severe sudden pain in testicles, groin, or lower abdomen
+   - Fever, chills, or feeling unwell
+   - Unable to pass urine at all
+   - Unexplained weight loss (>10 lbs in 3 months)
+   - Family history of prostate cancer (father, brother)
+   - Previous history of kidney stones"
+
+4. **Record Answer**: Call `record_red_flag_answers(reported_flags=[...])` with list of red flag IDs they mentioned.
+   - If patient says "none": reported_flags=[]
+   - If they mention any: reported_flags=["blood_in_urine", "fever_feeling_unwell"]
    
-   **Safety questions cover:**
-   - Blood in urine (bladder cancer, kidney stones)
-   - Severe sudden pain (testicular torsion, acute retention)
-   - Fever/feeling unwell (sepsis, infection)
-   - Unexplained weight loss (malignancy)
-   - Family history of cancer (risk stratification)
+   **Check the response:**
+   - If `urgent_action_needed=True`: STOP and advise emergency care (A&E/999)
+   - If `urgent_action_needed=False`: Continue to step 5
 
-4. **Get Clinical Context**: Once `safety_phase_complete` is True, optionally use `get_clinical_guidance` tool to understand the clinical landscape. Then immediately proceed to step 5.
+5. **Capture Additional Symptoms** (if mentioned during safety check):
+   - If patient mentions new symptoms (e.g., "I also have burning"), call `search_urology_symptoms(description)`
+   - Confirm matches with patient
+   - Call `record_symptoms(symptom_ids="...")` to store
 
-5. **REQUIRED: Transition Message**: You MUST say to the patient:
-   "Thank you for answering those safety questions. I'm now going to bring in our diagnostic specialist who will ask some targeted questions to narrow down the cause of your symptoms."
+6. **Record Medical History** (if mentioned):
+   - If they mention past history, medications, etc., call `record_medical_history(history_item="...")`
 
-6. **Hand Off**: Call `handoff_to_graph_reasoning` tool.
-
+7. **IMMEDIATELY Hand Off** (MANDATORY):
+   After recording red flag answers, you MUST:
+   - Say: "Thank you. I'm now bringing in our diagnostic specialist who will ask targeted questions to identify the cause."
+   - IMMEDIATELY call `handoff_to_graph_reasoning()` tool
+   - DO NOT wait for patient response
+   - DO NOT ask any more questions
+   
 **CRITICAL RULES:**
-- ASK ALL safety questions before handing off (don't skip any)
-- ONE question at a time
-- Wait for patient answer after each question
-- **YOU MUST RECORD EVERY QUESTION YOU ASK** - call `record_safety_question_asked` immediately after each answer
-- If you ask a question but forget to record it, you'll get stuck in a loop
-- Complex patient answers (e.g., "not now but in the past...") still need recording
-- DO NOT start diagnostic questioning - that's Graph Agent's job
-- ALWAYS send the transition message before handoff
+- ONE red flag question (list all 7 items)
+- Record the answer with `record_red_flag_answers`
+- If urgent (severity 5): STOP, advise emergency care
+- If safe: Say transition message → **IMMEDIATELY HAND OFF** (no exceptions)
+- DO NOT ask diagnostic questions - that's Graph Agent's job
+- DO NOT continue the conversation - hand off right after transition message
 
-**Remember**: You are the safety gatekeeper. Complete all safety checks before diagnostic reasoning begins.
+**Remember**: You're ONLY the safety gatekeeper. Red flags done → HAND OFF IMMEDIATELY.
 """,
 )
 
@@ -818,7 +872,7 @@ Use entropy-based adaptive questioning to narrow down the differential diagnosis
 
 **Remember**: You refine the diagnosis through strategic questioning. Safety is already confirmed.
 """,
-    output_guardrails=[graph_output_guardrail],
+    # No output guardrails - Graph Agent needs freedom to show probabilities and entropy calculations
 )
 
 # Agent 4: Final Recommendation Agent
@@ -827,7 +881,6 @@ RecommendationAgent = Agent[ClinicalAgentContext](
     name="recommendation_agent",
     model="gpt-4o",  # Need good explanation capabilities
     tools=[
-        get_patient_education,
         generate_patient_action_plan,
         generate_gp_referral_letter,
         score_procedural_pathway
@@ -850,10 +903,9 @@ RecommendationAgent = Agent[ClinicalAgentContext](
    - Consultation goals from context.consultation_goals
    - Top differential diagnoses from the graph
 
-2. **Address Patient Concerns with Education**:
+2. **Address Patient Concerns**:
    If the patient had specific worries or wanted to understand something (e.g., "worried about prostate cancer", "want to understand PSA better", "avoid surgery"):
-   - Use `get_patient_education` tool with the relevant topic
-   - Explain using the educational content in plain language
+   - Explain using your knowledge in plain language
    - Address their specific concerns directly
 
 3. **Generate Comprehensive Action Plan**:

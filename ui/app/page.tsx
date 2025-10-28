@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { AgentPanel } from "@/components/agent-panel";
-import { Chat } from "@/components/chat";
+import { Chat } from "@/components/Chat";
 import type { Agent, AgentEvent, GuardrailCheck, Message } from "@/lib/types";
 import { callChatAPI } from "@/lib/api";
 
@@ -21,6 +21,10 @@ export default function Home() {
   useEffect(() => {
     (async () => {
       const data = await callChatAPI("", conversationId ?? "");
+      if (!data) {
+        console.error("Failed to initialize conversation");
+        return;
+      }
       setConversationId(data.conversation_id);
       setCurrentAgent(data.current_agent);
       setContext(data.context);
@@ -58,6 +62,19 @@ export default function Home() {
     setIsLoading(true);
 
     const data = await callChatAPI(content, conversationId ?? "");
+
+    if (!data) {
+      console.error("Failed to send message - backend error");
+      setMessages((prev) => [...prev, {
+        id: Date.now().toString(),
+        content: "Sorry, there was an error communicating with the backend. Please check the console for details.",
+        role: "assistant",
+        agent: "system",
+        timestamp: new Date(),
+      }]);
+      setIsLoading(false);
+      return;
+    }
 
     if (!conversationId) setConversationId(data.conversation_id);
     setCurrentAgent(data.current_agent);
