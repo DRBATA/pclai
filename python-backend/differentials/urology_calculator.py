@@ -461,9 +461,15 @@ def _add_discrete_symptoms(log_odds: Dict[str, float], symptoms: Dict[str, Any])
     
     # Fever
     if symptoms.get("fever_present"):
+        # Fever PRESENT: add positive points
         for condition in SYMPTOM_POINTS["fever"]:
             if condition in log_odds:
                 log_odds[condition] += SYMPTOM_POINTS["fever"][condition]
+    elif symptoms.get("fever_present") is False:
+        # Fever ABSENT: add NEGATIVE of points (flip sign)
+        for condition in SYMPTOM_POINTS["fever"]:
+            if condition in log_odds:
+                log_odds[condition] -= SYMPTOM_POINTS["fever"][condition]  # Subtract = flip sign
     
     # Severe nocturia
     nocturia_count = symptoms.get("nocturia_per_night", 0)

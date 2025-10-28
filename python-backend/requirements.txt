@@ -6,3 +6,5 @@ supabase>=2.0.3
 openai>=1.6.1
 psycopg2-binary>=2.9.9
 pyyaml>=6.0
+fastapi>=0.116.1
+uvicorn[standard]>=0.35.0

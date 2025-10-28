@@ -559,3 +559,34 @@ Evidence Base: EAU 2023-2025, NICE NG131-2024, Ahmed 2021
 
 Note: This is decision support output. Clinical judgment and MDT review required.
 """
+
+
+# =============================================================================
+# ALIASES FOR AGENT TOOLS
+# =============================================================================
+
+def assess_biopsy_indication(patient_data: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Wrapper for calculate_mri_fusion_indication - used by AI agents
+    MRI fusion biopsy IS the biopsy indication we're assessing
+    """
+    return calculate_mri_fusion_indication(
+        pirads=patient_data.get("pirads", 3),
+        psad=patient_data.get("psad", 0.1),
+        psa_velocity=patient_data.get("psa_velocity"),
+        lesion_size_mm=patient_data.get("lesion_size_mm"),
+        fusion_available=patient_data.get("fusion_available", True)
+    )
+
+
+def assess_hifu_eligibility(patient_data: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Wrapper for calculate_hifu_eligibility - used by AI agents
+    """
+    return calculate_hifu_eligibility(
+        pirads=patient_data.get("pirads", 3),
+        lesion_size_mm=patient_data.get("lesion_size_mm", 10),
+        gleason_score=patient_data.get("gleason_score", "3+4"),
+        prostate_volume_cc=patient_data.get("prostate_volume", 50),
+        hifu_available=patient_data.get("hifu_available", False)
+    )

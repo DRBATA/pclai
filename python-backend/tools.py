@@ -428,15 +428,26 @@ def update_graph_with_answer(
     :return: Updated graph state and new differential probabilities
     """
     try:
-        # Store answer in context
-        context.context.__dict__[symptom_id] = value
+        # Map symptom_id to the key used by the calculator
+        symptom_key_mapping = {
+            "fever": "fever_present",
+            "pain_burning": "dysuria",
+            "blood_in_urine": "hematuria"
+        }
+        
+        # Use mapped key if available, otherwise use symptom_id as-is
+        storage_key = symptom_key_mapping.get(symptom_id, symptom_id)
+        
+        # Store answer in context using the CORRECT key
+        context.context.__dict__[storage_key] = value
+        print(f"DEBUG update_graph_with_answer: Stored {storage_key}={value} in context")
         
         # If severity-related, ensure it's stored as numeric
-        if "severity" in symptom_id or symptom_id in ["nocturia_per_night", "pain_severity"]:
+        if "severity" in storage_key or storage_key in ["nocturia_per_night", "pain_severity"]:
             try:
-                context.context.__dict__[symptom_id] = int(value) if isinstance(value, str) else value
+                context.context.__dict__[storage_key] = int(value) if isinstance(value, str) else value
             except:
-                context.context.__dict__[symptom_id] = value
+                context.context.__dict__[storage_key] = value
         
         # Remove from reported_symptoms if it was there (now answered)
         if symptom_id in context.context.reported_symptoms:
@@ -476,18 +487,18 @@ def update_graph_with_answer(
             graph["nodes"] = {}
         graph["nodes"]["_metadata"] = {"type": "metadata", "entropy": new_entropy}
         
-        # CRITICAL: Mark the symptom node with its value so it won't be asked again
+        # CRITICAL: Mark BOTH the UI symptom_id AND the calculator key in the graph
+        # This prevents the question from being asked again
+        
+        # Mark the original symptom_id (e.g., "fever") if it exists in graph
         if symptom_id in graph["nodes"]:
             graph["nodes"][symptom_id]["value"] = value
             print(f"DEBUG update_graph_with_answer: Marked {symptom_id} with value={value} in graph")
         
-        # Also mark any mapped symptom (e.g., fever -> fever_present)
-        symptom_map = {"pain_burning": "dysuria", "blood_in_urine": "hematuria", "fever": "fever_present"}
-        if symptom_id in symptom_map:
-            mapped_id = symptom_map[symptom_id]
-            if mapped_id in graph["nodes"]:
-                graph["nodes"][mapped_id]["value"] = value
-                print(f"DEBUG update_graph_with_answer: Also marked mapped symptom {mapped_id} with value={value}")
+        # Mark the mapped calculator key (e.g., "fever_present") if different
+        if storage_key != symptom_id and storage_key in graph["nodes"]:
+            graph["nodes"][storage_key]["value"] = value
+            print(f"DEBUG update_graph_with_answer: Also marked calculator key {storage_key} with value={value}")
         
         context.context.probability_graph = graph
         
