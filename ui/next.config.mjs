@@ -3,10 +3,11 @@ const nextConfig = {
   devIndicators: false,
   // Proxy /chat requests to the backend server
   async rewrites() {
+    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://127.0.0.1:8000";
     return [
       {
         source: "/chat",
-        destination: "http://127.0.0.1:8000/chat",
+        destination: `${backendUrl}/chat`,
       },
     ];
   },
